@@ -19,12 +19,13 @@ class BraTSContrastDataset(Dataset):
         spatial_size: tuple[int, int, int] = (128, 160, 192),
         a_min: float = 0.0,
         a_max: float = 3000.0,
+        transform=None,
     ):
         self.data_dir = Path(data_dir)
         self.mode = mode
         self.fixed_mapping = fixed_mapping
         self.items = sorted(path for path in self.data_dir.iterdir() if path.is_dir())
-        self.transform = build_pair_transforms(spatial_size=spatial_size, a_min=a_min, a_max=a_max)
+        self.transform = transform or build_pair_transforms(spatial_size=spatial_size, a_min=a_min, a_max=a_max)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -45,7 +46,8 @@ class BraTSContrastDataset(Dataset):
             "src_modality": src_modality,
             "tgt_modality": tgt_modality,
         }
-        return sample
+        return self.transform(sample)
+
 
 
 def build_dataloader(

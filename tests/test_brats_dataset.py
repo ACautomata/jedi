@@ -21,6 +21,7 @@ class TestBraTSDataset(unittest.TestCase):
             data_dir=self.tmpdir.name,
             mode="val",
             fixed_mapping=("t1n", "t2w"),
+            transform=lambda sample: sample,
         )
         sample = dataset[0]
         self.assertEqual(sample["src_modality"], "t1n")
@@ -31,10 +32,21 @@ class TestBraTSDataset(unittest.TestCase):
             data_dir=self.tmpdir.name,
             mode="train",
             fixed_mapping=("t1n", "t2w"),
+            transform=lambda sample: sample,
         )
         for _ in range(20):
             sample = dataset[0]
             self.assertNotEqual(sample["src_modality"], sample["tgt_modality"])
+
+    def test_dataset_applies_transform(self):
+        dataset = BraTSContrastDataset(
+            data_dir=self.tmpdir.name,
+            mode="val",
+            fixed_mapping=("t1n", "t2w"),
+            transform=lambda sample: {**sample, "transformed": True},
+        )
+        sample = dataset[0]
+        self.assertTrue(sample["transformed"])
 
 
 if __name__ == "__main__":
