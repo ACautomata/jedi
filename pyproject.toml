@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jedi"
+version = "0.1.0"
+description = "BraTS2023 cross-modality contrast conversion with a le-wm-aligned pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "einops",
+  "hydra-core",
+  "lightning",
+  "monai[nibabel]",
+  "numpy",
+  "omegaconf",
+  "torch",
+  "torchvision",
+]
+
+[project.scripts]
+jedi-train-encoder = "jedi.train_encoder:main"
+jedi-train-decoder = "jedi.train_decoder:main"
+jedi-infer = "jedi.infer:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jedi"]
