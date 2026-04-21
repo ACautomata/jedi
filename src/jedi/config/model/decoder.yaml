@@ -1,0 +1,7 @@
+decoder:
+  _target_: jedi.models.decoder3d.VolumeDecoder3D
+  embed_dim: 256
+  patch_size: [8, 8, 8]
+  out_channels: 1
+  hidden_channels: 64
+encoder_checkpoint: /path/to/stage1.ckpt

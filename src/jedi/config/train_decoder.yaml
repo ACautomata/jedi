@@ -1,0 +1,14 @@
+defaults:
+  - data: brats2023
+  - model: encoder
+  - model@decoder_model: decoder
+  - _self_
+
+seed: 2024
+optimizer:
+  lr: 1e-4
+  weight_decay: 1e-4
+trainer:
+  max_epochs: 100
+  accelerator: gpu
+  devices: 1

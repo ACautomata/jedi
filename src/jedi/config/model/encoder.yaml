@@ -1,0 +1,30 @@
+encoder:
+  _target_: jedi.models.ViT3DEncoder
+  image_size: [128, 160, 192]
+  patch_size: [8, 8, 8]
+  in_channels: 1
+  embed_dim: 256
+  depth: 4
+  heads: 8
+  dim_head: 32
+  mlp_dim: 512
+projector:
+  _target_: jedi.models.MLP
+  input_dim: 256
+  hidden_dim: 512
+  output_dim: 256
+  norm_fn: LayerNorm
+predictor:
+  _target_: jedi.models.LatentPredictor
+  input_dim: 256
+  hidden_dim: 256
+pred_proj:
+  _target_: jedi.models.MLP
+  input_dim: 256
+  hidden_dim: 512
+  output_dim: 256
+  norm_fn: LayerNorm
+regularizer:
+  _target_: jedi.models.SIGReg
+  knots: 17
+  num_proj: 1024
