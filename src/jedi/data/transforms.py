@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 from monai.transforms import (
+    CenterSpatialCropd,
     Compose,
     EnsureChannelFirstd,
     EnsureTyped,
@@ -39,6 +40,7 @@ def build_pair_transforms(spatial_size: tuple[int, int, int], a_min: float, a_ma
             EnsureChannelFirstd(keys=["src", "tgt"]),
             Orientationd(keys=["src", "tgt"], axcodes="RAS"),
             SpatialPadd(keys=["src", "tgt"], spatial_size=spatial_size),
+            CenterSpatialCropd(keys=["src", "tgt"], roi_size=spatial_size),
             ScaleIntensityRanged(
                 keys=["src", "tgt"],
                 a_min=a_min,

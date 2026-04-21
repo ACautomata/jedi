@@ -17,6 +17,11 @@ class TestTransforms(unittest.TestCase):
         output = pad_or_crop_volume(volume, spatial_size=(128, 160, 192))
         self.assertEqual(output.shape, (128, 160, 192))
 
+    def test_pad_or_crop_volume_crops_oversized_volume(self):
+        volume = np.zeros((155, 240, 240), dtype=np.float32)
+        output = pad_or_crop_volume(volume, spatial_size=(128, 160, 192))
+        self.assertEqual(output.shape, (128, 160, 192))
+
 
 if __name__ == "__main__":
     unittest.main()
