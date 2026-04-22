@@ -10,6 +10,7 @@ from jedi.data.transforms import build_pair_transforms
 
 class BraTSContrastDataset(Dataset):
     modalities = ("t1n", "t1c", "t2w", "t2f")
+    _modality_to_idx = {m: i for i, m in enumerate(modalities)}
 
     def __init__(
         self,
@@ -45,6 +46,8 @@ class BraTSContrastDataset(Dataset):
             "case_id": case_id,
             "src_modality": src_modality,
             "tgt_modality": tgt_modality,
+            "src_modality_idx": self._modality_to_idx[src_modality],
+            "tgt_modality_idx": self._modality_to_idx[tgt_modality],
         }
         return self.transform(sample)
 

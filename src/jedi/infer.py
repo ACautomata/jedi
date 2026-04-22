@@ -47,7 +47,15 @@ def build_inference_components(model_config_path: str, decoder_config_path: str,
     projector = instantiate(model_cfg["projector"])
     predictor = instantiate(model_cfg["predictor"])
     pred_proj = instantiate(model_cfg["pred_proj"])
-    model = CrossModalityJEPA(encoder=encoder, projector=projector, predictor=predictor, pred_proj=pred_proj)
+    modality_embedder_cfg = model_cfg.get("modality_embedder", None)
+    modality_embedder = instantiate(modality_embedder_cfg) if modality_embedder_cfg else None
+    model = CrossModalityJEPA(
+        encoder=encoder,
+        projector=projector,
+        predictor=predictor,
+        pred_proj=pred_proj,
+        modality_embedder=modality_embedder,
+    )
     model = load_encoder_side_checkpoint(model, encoder_checkpoint)
     decoder = instantiate(decoder_cfg["decoder"])
     decoder = load_decoder_checkpoint(decoder, decoder_checkpoint)
@@ -56,10 +64,11 @@ def build_inference_components(model_config_path: str, decoder_config_path: str,
     return model, decoder
 
 
-def run_inference(model, decoder, src_volume: torch.Tensor) -> torch.Tensor:
+def run_inference(model, decoder, src_volume: torch.Tensor, tgt_modality_idx: int | None = None) -> torch.Tensor:
     with torch.no_grad():
         src_output = model.encode_volume(src_volume)
-        pred_tgt_emb = model.predict_tgt(src_output["patch_embeddings"])
+        modality_tensor = torch.tensor([tgt_modality_idx]) if tgt_modality_idx is not None else None
+        pred_tgt_emb = model.predict_tgt(src_output["patch_embeddings"], tgt_modality=modality_tensor)
         grid_size = src_output["grid_size"]
         return decoder(pred_tgt_emb, grid_size)
 
@@ -72,6 +81,7 @@ def main():
     parser.add_argument("--decoder-checkpoint", required=True)
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--tgt-modality", type=int, default=None, help="Target modality index (0=t1n, 1=t1c, 2=t2w, 3=t2f)")
     args = parser.parse_args()
 
     model, decoder = build_inference_components(
@@ -81,7 +91,7 @@ def main():
         decoder_checkpoint=args.decoder_checkpoint,
     )
     src_volume = torch.load(args.input, map_location="cpu")
-    prediction = run_inference(model, decoder, src_volume)
+    prediction = run_inference(model, decoder, src_volume, tgt_modality_idx=args.tgt_modality)
     torch.save(prediction, args.output)
 
 
