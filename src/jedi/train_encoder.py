@@ -28,7 +28,8 @@ def main(cfg: DictConfig):
         modality_embedder=modality_embedder,
     )
     train_loader = build_dataloader(cfg.data.data_dir, "train", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
-    val_loader = build_dataloader(cfg.data.data_dir, "val", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
+    val_data_dir = cfg.data.get("val_data_dir") or cfg.data.data_dir
+    val_loader = build_dataloader(val_data_dir, "val", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
     total_steps = len(train_loader) * cfg.trainer.max_epochs
     warmup_steps = OmegaConf.select(cfg, "scheduler.warmup_steps", default=0)
     module = EncoderTrainingModule(
