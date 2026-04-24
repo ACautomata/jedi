@@ -30,8 +30,9 @@ class Attention(nn.Module):
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
         self.to_out = nn.Linear(inner_dim, dim)
 
-    def forward(self, x, causal=False):
-        x = self.norm(x)
+    def forward(self, x, causal=False, apply_norm=True):
+        if apply_norm:
+            x = self.norm(x)
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = (rearrange(t, "b t (h d) -> b h t d", h=self.heads) for t in qkv)
         out = F.scaled_dot_product_attention(

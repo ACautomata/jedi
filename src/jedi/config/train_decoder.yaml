@@ -8,7 +8,14 @@ seed: 2024
 optimizer:
   lr: 1e-4
   weight_decay: 1e-4
+scheduler:
+  warmup_steps: 500
 trainer:
   max_epochs: 100
   accelerator: gpu
   devices: 1
+  gradient_clip_val: 1.0
+callbacks:
+  system_monitoring:
+    _target_: jedi.training.callbacks.SystemMonitoringCallback
+    log_interval: 50
