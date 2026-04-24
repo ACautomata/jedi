@@ -28,7 +28,7 @@ class ConditionalBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.adaLN_modulation(c).chunk(6, dim=-1)
         )
-        x = x + gate_msa * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), causal=True)
+        x = x + gate_msa * self.attn(modulate(self.norm1(x), shift_msa, scale_msa), causal=True, apply_norm=False)
         x = x + gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
 

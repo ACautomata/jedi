@@ -7,24 +7,12 @@ import yaml
 from hydra.utils import instantiate
 
 from jedi.models import CrossModalityJEPA
+from jedi.utils import load_encoder_side_checkpoint
 
 
 def load_model_config(config_path: str):
     with open(config_path, "r", encoding="utf-8") as file_obj:
         return yaml.safe_load(file_obj)
-
-
-def load_encoder_side_checkpoint(model, checkpoint_path: str):
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    state_dict = checkpoint.get("state_dict", checkpoint)
-    cleaned_state_dict = {}
-    for key, value in state_dict.items():
-        if key.startswith("model."):
-            cleaned_state_dict[key[len("model."):]] = value
-        else:
-            cleaned_state_dict[key] = value
-    model.load_state_dict(cleaned_state_dict, strict=False)
-    return model
 
 
 def load_decoder_checkpoint(decoder, checkpoint_path: str):
@@ -67,7 +55,7 @@ def build_inference_components(model_config_path: str, decoder_config_path: str,
 def run_inference(model, decoder, src_volume: torch.Tensor, tgt_modality_idx: int | None = None) -> torch.Tensor:
     with torch.no_grad():
         src_output = model.encode_volume(src_volume)
-        modality_tensor = torch.tensor([tgt_modality_idx]) if tgt_modality_idx is not None else None
+        modality_tensor = torch.tensor([tgt_modality_idx], device=src_volume.device) if tgt_modality_idx is not None else None
         pred_tgt_emb = model.predict_tgt(src_output["patch_embeddings"], tgt_modality=modality_tensor)
         grid_size = src_output["grid_size"]
         return decoder(pred_tgt_emb, grid_size)

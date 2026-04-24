@@ -1,6 +1,5 @@
 import hydra
 import lightning as pl
-import torch
 from hydra.utils import instantiate
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
@@ -9,19 +8,7 @@ from omegaconf import DictConfig, OmegaConf
 from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
 from jedi.training.decoder_module import DecoderTrainingModule
-
-
-def load_encoder_side_checkpoint(model, checkpoint_path: str):
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    state_dict = checkpoint.get("state_dict", checkpoint)
-    cleaned_state_dict = {}
-    for key, value in state_dict.items():
-        if key.startswith("model."):
-            cleaned_state_dict[key[len("model."):]] = value
-        else:
-            cleaned_state_dict[key] = value
-    model.load_state_dict(cleaned_state_dict, strict=False)
-    return model
+from jedi.utils import load_encoder_side_checkpoint
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train_decoder")
