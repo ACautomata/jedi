@@ -34,6 +34,7 @@ def main(cfg: DictConfig):
     val_loader = build_dataloader(val_data_dir, "val", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
     total_steps = len(train_loader) * cfg.trainer.max_epochs
     warmup_steps = OmegaConf.select(cfg, "scheduler.warmup_steps", default=0)
+    use_cls_embedding = OmegaConf.select(cfg.decoder_model, "use_cls_embedding", default=False)
     module = DecoderTrainingModule(
         model=model,
         decoder=decoder,
@@ -41,6 +42,7 @@ def main(cfg: DictConfig):
         weight_decay=cfg.optimizer.weight_decay,
         warmup_steps=warmup_steps,
         total_steps=total_steps,
+        use_cls_embedding=use_cls_embedding,
     )
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
