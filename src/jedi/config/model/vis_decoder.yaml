@@ -1,0 +1,14 @@
+decoder:
+  _target_: jedi.models.vis_decoder.VisualizationDecoder
+  cls_dim: 256
+  hidden_dim: 512
+  image_size: [128, 160, 192]
+  patch_size: [8, 8, 8]
+  out_channels: 1
+  depth: 4
+  heads: 8
+  dim_head: 64
+  mlp_dim: 2048
+  dropout: 0.0
+encoder_checkpoint: /path/to/stage1.ckpt
+use_cls_embedding: true

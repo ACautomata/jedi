@@ -5,7 +5,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 
 class DecoderTrainingModule(pl.LightningModule):
-    def __init__(self, model, decoder, lr, weight_decay, warmup_steps=0, total_steps=0):
+    def __init__(self, model, decoder, lr, weight_decay, warmup_steps=0, total_steps=0, use_cls_embedding=False):
         super().__init__()
         self.model = model
         self.decoder = decoder
@@ -13,16 +13,36 @@ class DecoderTrainingModule(pl.LightningModule):
         self.weight_decay = weight_decay
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
+        self.use_cls_embedding = use_cls_embedding
+        self._validate_decoder_config()
         for param in self.model.parameters():
             param.requires_grad = False
+
+    def _validate_decoder_config(self):
+        using_vis_decoder = hasattr(self.decoder, "cls_proj")
+        if self.use_cls_embedding and not using_vis_decoder:
+            raise ValueError(
+                "use_cls_embedding=True requires VisualizationDecoder "
+                f"(got {type(self.decoder).__name__})"
+            )
+        if not self.use_cls_embedding and using_vis_decoder:
+            raise ValueError(
+                "use_cls_embedding=False requires VolumeDecoder3D "
+                f"(got {type(self.decoder).__name__})"
+            )
+
+    def _get_decoder_input(self, src_output, batch):
+        if self.use_cls_embedding:
+            return src_output["cls_embedding"]
+        tgt_modality_idx = batch.get("tgt_modality_idx", None)
+        return self.model.predict_tgt(src_output["patch_embeddings"], tgt_modality=tgt_modality_idx)
 
     def training_step(self, batch, batch_idx):
         with torch.no_grad():
             src_output, _ = self.model.encode_src_tgt(batch["src"], batch["tgt"])
-            tgt_modality_idx = batch.get("tgt_modality_idx", None)
-            pred_tgt_emb = self.model.predict_tgt(src_output["patch_embeddings"], tgt_modality=tgt_modality_idx)
+            decoder_input = self._get_decoder_input(src_output, batch)
             grid_size = src_output["grid_size"]
-        prediction = self.decoder(pred_tgt_emb, grid_size)
+        prediction = self.decoder(decoder_input, grid_size)
         l1_loss = F.l1_loss(prediction, batch["tgt"])
         self.log("train/l1_loss", l1_loss, on_step=True, on_epoch=True, sync_dist=True)
         return l1_loss
@@ -30,10 +50,9 @@ class DecoderTrainingModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
             src_output, _ = self.model.encode_src_tgt(batch["src"], batch["tgt"])
-            tgt_modality_idx = batch.get("tgt_modality_idx", None)
-            pred_tgt_emb = self.model.predict_tgt(src_output["patch_embeddings"], tgt_modality=tgt_modality_idx)
+            decoder_input = self._get_decoder_input(src_output, batch)
             grid_size = src_output["grid_size"]
-        prediction = self.decoder(pred_tgt_emb, grid_size)
+        prediction = self.decoder(decoder_input, grid_size)
         target = batch["tgt"]
         l1_loss = F.l1_loss(prediction, target)
         self.log("val/l1_loss", l1_loss, on_epoch=True, sync_dist=True)
