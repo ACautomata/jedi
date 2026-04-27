@@ -10,6 +10,12 @@ optimizer:
   weight_decay: 1e-4
 scheduler:
   warmup_steps: 500
+wavelet_loss:
+  weight: 0.0
+  wave: db4
+  J: 2
+  alpha_low: 0.3
+  alpha_high: 0.7
 trainer:
   max_epochs: 100
   accelerator: gpu
