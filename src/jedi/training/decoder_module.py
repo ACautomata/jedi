@@ -1,11 +1,14 @@
+import logging
 import lightning as pl
 import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
+logger = logging.getLogger(__name__)
+
 
 class DecoderTrainingModule(pl.LightningModule):
-    def __init__(self, model, decoder, lr, weight_decay, warmup_steps=0, total_steps=0, use_cls_embedding=False):
+    def __init__(self, model, decoder, lr, weight_decay, warmup_steps=0, total_steps=0, use_cls_embedding=False, wavelet_weight=0.0, wavelet_config=None):
         super().__init__()
         self.model = model
         self.decoder = decoder
@@ -17,6 +20,14 @@ class DecoderTrainingModule(pl.LightningModule):
         self._validate_decoder_config()
         for param in self.model.parameters():
             param.requires_grad = False
+        self.wavelet_weight = wavelet_weight
+        self.wavelet_loss = None
+        if wavelet_weight > 0:
+            if wavelet_config:
+                from jedi.models.wavelet_loss import WaveletLoss
+                self.wavelet_loss = WaveletLoss(**wavelet_config)
+            else:
+                logger.warning("wavelet_weight=%s but wavelet_config is empty — wavelet loss disabled", wavelet_weight)
 
     def _validate_decoder_config(self):
         using_vis_decoder = hasattr(self.decoder, "cls_proj")
@@ -45,6 +56,12 @@ class DecoderTrainingModule(pl.LightningModule):
         prediction = self.decoder(decoder_input, grid_size)
         l1_loss = F.l1_loss(prediction, batch["tgt"])
         self.log("train/l1_loss", l1_loss, on_step=True, on_epoch=True, sync_dist=True)
+        if self.wavelet_loss is not None:
+            wl = self.wavelet_loss(prediction, batch["tgt"])
+            self.log("train/wavelet_loss", wl, on_step=True, on_epoch=True, sync_dist=True)
+            total = l1_loss + self.wavelet_weight * wl
+            self.log("train/total_loss", total, on_step=True, on_epoch=True, sync_dist=True)
+            return total
         return l1_loss
 
     def validation_step(self, batch, batch_idx):
@@ -61,6 +78,9 @@ class DecoderTrainingModule(pl.LightningModule):
         self.log("val/psnr", psnr, on_epoch=True, sync_dist=True)
         ssim_val = self._compute_ssim(prediction, target)
         self.log("val/ssim", ssim_val, on_epoch=True, sync_dist=True)
+        if self.wavelet_loss is not None:
+            wl = self.wavelet_loss(prediction, target)
+            self.log("val/wavelet_loss", wl, on_epoch=True, sync_dist=True)
         self.log("val/loss", l1_loss, on_epoch=True, sync_dist=True)
         return l1_loss
 
