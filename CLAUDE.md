@@ -22,3 +22,7 @@ PYTHONPATH=src .venv/bin/python -m jedi.train_decoder       # stage 2 training
 - MONAI transform chain uses `SpatialPadd` + `CenterSpatialCropd` to guarantee fixed spatial_size
 - Stage 2 loads stage 1 checkpoint via `load_encoder_side_checkpoint()` before freezing
 - Decoder output uses `Tanh` to match `(-1, 1)` normalization
+- Lightning `validation_step` should wrap the entire computation in `torch.no_grad()`, not just the encoder
+
+## Dependencies
+- `pytorch-wavelets` requires `uv pip install PyWavelets` as an undeclared runtime dependency
