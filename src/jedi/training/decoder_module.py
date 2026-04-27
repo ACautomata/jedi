@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
+from jedi.models.wavelet_loss import WaveletLoss
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +26,6 @@ class DecoderTrainingModule(pl.LightningModule):
         self.wavelet_loss = None
         if wavelet_weight > 0:
             if wavelet_config:
-                from jedi.models.wavelet_loss import WaveletLoss
                 self.wavelet_loss = WaveletLoss(**wavelet_config)
             else:
                 logger.warning("wavelet_weight=%s but wavelet_config is empty — wavelet loss disabled", wavelet_weight)
@@ -69,19 +70,19 @@ class DecoderTrainingModule(pl.LightningModule):
             src_output, _ = self.model.encode_src_tgt(batch["src"], batch["tgt"])
             decoder_input = self._get_decoder_input(src_output, batch)
             grid_size = src_output["grid_size"]
-        prediction = self.decoder(decoder_input, grid_size)
-        target = batch["tgt"]
-        l1_loss = F.l1_loss(prediction, target)
-        self.log("val/l1_loss", l1_loss, on_epoch=True, sync_dist=True)
-        mse = F.mse_loss(prediction, target)
-        psnr = 10.0 * torch.log10(torch.tensor(4.0) / (mse + 1e-10))
-        self.log("val/psnr", psnr, on_epoch=True, sync_dist=True)
-        ssim_val = self._compute_ssim(prediction, target)
-        self.log("val/ssim", ssim_val, on_epoch=True, sync_dist=True)
-        if self.wavelet_loss is not None:
-            wl = self.wavelet_loss(prediction, target)
-            self.log("val/wavelet_loss", wl, on_epoch=True, sync_dist=True)
-        self.log("val/loss", l1_loss, on_epoch=True, sync_dist=True)
+            prediction = self.decoder(decoder_input, grid_size)
+            target = batch["tgt"]
+            l1_loss = F.l1_loss(prediction, target)
+            self.log("val/l1_loss", l1_loss, on_epoch=True, sync_dist=True)
+            mse = F.mse_loss(prediction, target)
+            psnr = 10.0 * torch.log10(torch.tensor(4.0) / (mse + 1e-10))
+            self.log("val/psnr", psnr, on_epoch=True, sync_dist=True)
+            ssim_val = self._compute_ssim(prediction, target)
+            self.log("val/ssim", ssim_val, on_epoch=True, sync_dist=True)
+            if self.wavelet_loss is not None:
+                wl = self.wavelet_loss(prediction, target)
+                self.log("val/wavelet_loss", wl, on_epoch=True, sync_dist=True)
+            self.log("val/loss", l1_loss, on_epoch=True, sync_dist=True)
         return l1_loss
 
     @staticmethod

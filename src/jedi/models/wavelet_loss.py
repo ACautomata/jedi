@@ -20,6 +20,8 @@ class WaveletLoss(nn.Module):
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         assert pred.ndim == 5, f"Expected 5D tensor (B,C,D,H,W), got shape {pred.shape}"
+        assert target.ndim == 5, f"Expected 5D tensor (B,C,D,H,W), got shape {target.shape}"
+        assert pred.shape == target.shape, f"pred and target shape mismatch: {pred.shape} vs {target.shape}"
         B, C, D = pred.shape[:3]
         H, W = pred.shape[3], pred.shape[4]
         pred_2d = pred.permute(0, 2, 1, 3, 4).reshape(B * D, C, H, W)
@@ -35,6 +37,6 @@ class WaveletLoss(nn.Module):
         Yl_t, Yh_t = self.dwt(tgt_2d)
 
         loss_ll = F.l1_loss(Yl_p, Yl_t)
-        loss_hf = sum(F.l1_loss(hp, ht) for hp, ht in zip(Yh_p, Yh_t))
+        loss_hf = torch.stack([F.l1_loss(hp, ht) for hp, ht in zip(Yh_p, Yh_t)]).sum()
         # /J normalizes the highpass term to mean across decomposition levels
         return self.alpha_low * loss_ll + (self.alpha_high / self.J) * loss_hf
