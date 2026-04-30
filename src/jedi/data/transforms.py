@@ -48,8 +48,8 @@ def pad_or_crop_volume(volume: np.ndarray, spatial_size: tuple[int, int, int]) -
 
 
 class RandGammaCorrectiond(MapTransform, RandomizableTransform):
-    def __init__(self, keys, gamma_range=(0.7, 1.5), prob=0.3):
-        MapTransform.__init__(self, keys)
+    def __init__(self, keys, gamma_range=(0.7, 1.5), prob=0.3, allow_missing_keys=False):
+        MapTransform.__init__(self, keys, allow_missing_keys)
         RandomizableTransform.__init__(self, prob)
         self.gamma_range = gamma_range
         self.gamma = 1.0
@@ -66,7 +66,7 @@ class RandGammaCorrectiond(MapTransform, RandomizableTransform):
             for key in self.key_iterator(d):
                 d[key] = convert_to_tensor(d[key], track_meta=get_track_meta(), dtype=torch.float32)
             return d
-        for key in self.keys:
+        for key in self.key_iterator(d):
             img = d[key]
             shifted = (img + 1.0) / 2.0
             if torch.is_tensor(img):
@@ -86,8 +86,8 @@ class _FixedRandSimulateLowResolutiond(MapTransform, RandomizableTransform):
     This wrapper samples the zoom once and reuses it.
     """
 
-    def __init__(self, keys, prob=0.1, zoom_range=(0.5, 1.0), **kwargs):
-        MapTransform.__init__(self, keys)
+    def __init__(self, keys, prob=0.1, zoom_range=(0.5, 1.0), allow_missing_keys=False, **kwargs):
+        MapTransform.__init__(self, keys, allow_missing_keys)
         RandomizableTransform.__init__(self, prob)
         self.sim = RandSimulateLowResolution(prob=1.0, zoom_range=zoom_range, **kwargs)
 
