@@ -35,11 +35,6 @@ def main(cfg: DictConfig):
     total_steps = len(train_loader) * cfg.trainer.max_epochs
     warmup_steps = OmegaConf.select(cfg, "scheduler.warmup_steps", default=0)
     use_cls_embedding = OmegaConf.select(cfg.decoder_model, "use_cls_embedding", default=False)
-    wavelet_cfg = OmegaConf.select(cfg, "wavelet_loss", default=None)
-    wavelet_weight = float(wavelet_cfg.weight) if wavelet_cfg else 0.0
-    wavelet_params = None
-    if wavelet_cfg and wavelet_weight > 0:
-        wavelet_params = {k: v for k, v in wavelet_cfg.items() if k != "weight"}
     module = DecoderTrainingModule(
         model=model,
         decoder=decoder,
@@ -48,8 +43,7 @@ def main(cfg: DictConfig):
         warmup_steps=warmup_steps,
         total_steps=total_steps,
         use_cls_embedding=use_cls_embedding,
-        wavelet_weight=wavelet_weight,
-        wavelet_config=wavelet_params,
+        gradient_clip_val=OmegaConf.select(cfg.trainer, "gradient_clip_val", default=1.0),
     )
     callbacks = [
         LearningRateMonitor(logging_interval="step"),
@@ -69,8 +63,6 @@ def main(cfg: DictConfig):
         max_epochs=cfg.trainer.max_epochs,
         accelerator=cfg.trainer.accelerator,
         devices=cfg.trainer.devices,
-        gradient_clip_val=OmegaConf.select(cfg.trainer, "gradient_clip_val", default=1.0),
-        gradient_clip_algorithm="norm",
         callbacks=callbacks,
         logger=CSVLogger("logs", name="decoder_stage"),
     )

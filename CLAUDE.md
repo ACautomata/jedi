@@ -21,8 +21,11 @@ PYTHONPATH=src .venv/bin/python -m jedi.train_decoder       # stage 2 training
 - `BraTSContrastDataset.__getitem__` must call `self.transform(sample)` — not returning raw dicts
 - MONAI transform chain uses `SpatialPadd` + `CenterSpatialCropd` to guarantee fixed spatial_size
 - Stage 2 loads stage 1 checkpoint via `load_encoder_side_checkpoint()` before freezing
+- Stage 2 uses manual optimization for PCGrad; pass gradient clipping into `DecoderTrainingModule`, not `Trainer(gradient_clip_val=...)`
+- Stage 2 loss is fixed L1 + wavelet objectives with PCGrad; do not reintroduce loss weight hyperparameters unless explicitly requested
 - Decoder output uses `Tanh` to match `(-1, 1)` normalization
 - Lightning `validation_step` should wrap the entire computation in `torch.no_grad()`, not just the encoder
+- Manual optimization changes need a minimal `Trainer.fit()` smoke test; direct `training_step()` calls do not cover optimizer/backward/scheduler paths
 
 ## Dependencies
 - `pytorch-wavelets` requires `uv pip install PyWavelets` as an undeclared runtime dependency

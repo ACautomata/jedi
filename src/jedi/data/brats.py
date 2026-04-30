@@ -5,7 +5,7 @@ from pathlib import Path
 
 from monai.data import DataLoader, Dataset
 
-from jedi.data.transforms import build_pair_transforms
+from jedi.data.transforms import build_pair_transforms, build_train_transforms
 
 
 class BraTSContrastDataset(Dataset):
@@ -26,7 +26,12 @@ class BraTSContrastDataset(Dataset):
         self.mode = mode
         self.fixed_mapping = fixed_mapping
         self.items = sorted(path for path in self.data_dir.iterdir() if path.is_dir())
-        self.transform = transform or build_pair_transforms(spatial_size=spatial_size, a_min=a_min, a_max=a_max)
+        if transform is not None:
+            self.transform = transform
+        elif self.mode == "train":
+            self.transform = build_train_transforms(spatial_size=spatial_size, a_min=a_min, a_max=a_max)
+        else:
+            self.transform = build_pair_transforms(spatial_size=spatial_size, a_min=a_min, a_max=a_max)
 
     def __len__(self) -> int:
         return len(self.items)
