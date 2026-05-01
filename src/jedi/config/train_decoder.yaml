@@ -16,6 +16,13 @@ trainer:
   devices: 1
   gradient_clip_val: 1.0
 callbacks:
-  system_monitoring:
-    _target_: jedi.training.callbacks.SystemMonitoringCallback
+  loss_metrics:
+    _target_: jedi.training.callbacks.LossMetricsCallback
+  training_dynamics:
+    _target_: jedi.training.callbacks.TrainingDynamicsCallback
     log_interval: 50
+  reconstruction_eval_metrics:
+    _target_: jedi.training.callbacks.ReconstructionEvalMetricsCallback
+    data_range: 2.0
+    log_train: false
+    log_interval: 100

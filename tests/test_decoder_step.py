@@ -44,8 +44,8 @@ class TestDecoderStep(unittest.TestCase):
             "src": torch.randn(2, 1, 32, 32, 32),
             "tgt": torch.randn(2, 1, 32, 32, 32),
         }
-        loss = module.training_step(batch, 0)
-        self.assertTrue(torch.isfinite(loss))
+        output = module.training_step(batch, 0)
+        self.assertTrue(torch.isfinite(output["loss"]))
         self.assertTrue(all(not param.requires_grad for param in model.parameters()))
         self.assertTrue(any(param.requires_grad for param in decoder.parameters()))
 
@@ -70,9 +70,10 @@ class TestDecoderStep(unittest.TestCase):
             "src": torch.randn(2, 1, 32, 32, 32),
             "tgt": torch.randn(2, 1, 32, 32, 32),
         }
-        loss = module.validation_step(batch, 0)
-        self.assertTrue(torch.isfinite(loss))
-
+        output = module.validation_step(batch, 0)
+        self.assertTrue(torch.isfinite(output["loss"]))
+        self.assertIn("prediction", output)
+        self.assertIn("target", output)
 
     def test_pcgrad_sets_decoder_grads(self):
         encoder = ViT3DEncoder(
@@ -130,6 +131,7 @@ class TestDecoderStep(unittest.TestCase):
             enable_checkpointing=False,
             logger=False,
             enable_progress_bar=False,
+            callbacks=[],
         )
         trainer.fit(module, loader)
         after = [param.detach() for param in decoder.parameters() if param.requires_grad]

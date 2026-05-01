@@ -64,22 +64,26 @@ class DecoderTrainingModule(pl.LightningModule):
         l1_loss = F.l1_loss(prediction, target)
         wl = self.wavelet_loss(prediction, target)
         loss = (l1_loss + wl) / 2
-        self.log("train/l1_loss", l1_loss, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train/wavelet_loss", wl, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train/loss", loss, on_step=True, on_epoch=True, sync_dist=True)
+        step_output = {
+            "loss": loss.detach(),
+            "l1_loss": l1_loss.detach(),
+            "wavelet_loss": wl.detach(),
+            "prediction": prediction.detach(),
+            "target": target.detach(),
+        }
 
         try:
             optimizer = self.optimizers()
         except RuntimeError as error:
             if "is not attached to a `Trainer`" not in str(error):
                 raise
-            return loss
+            return step_output
         optimizer.zero_grad()
         self._pc_backward([l1_loss, wl])
         self._clip_gradients(optimizer)
         optimizer.step()
         self._step_scheduler()
-        return loss.detach()
+        return step_output
 
     def _pc_backward(self, objectives):
         params = [param for param in self.decoder.parameters() if param.requires_grad]
@@ -158,32 +162,15 @@ class DecoderTrainingModule(pl.LightningModule):
             prediction = self.decoder(decoder_input, grid_size)
             target = batch["tgt"]
             l1_loss = F.l1_loss(prediction, target)
-            self.log("val/l1_loss", l1_loss, on_epoch=True, sync_dist=True)
-            mse = F.mse_loss(prediction, target)
-            psnr = 10.0 * torch.log10(prediction.new_tensor(4.0) / (mse + 1e-10))
-            self.log("val/psnr", psnr, on_epoch=True, sync_dist=True)
-            ssim_val = self._compute_ssim(prediction, target)
-            self.log("val/ssim", ssim_val, on_epoch=True, sync_dist=True)
             wl = self.wavelet_loss(prediction, target)
             loss = (l1_loss + wl) / 2
-            self.log("val/wavelet_loss", wl, on_epoch=True, sync_dist=True)
-            self.log("val/loss", loss, on_epoch=True, sync_dist=True)
-        return loss
-
-    @staticmethod
-    def _compute_ssim(pred, target, window_size=7):
-        mid = pred.shape[2] // 2
-        pred_slice = pred[:, 0, mid]
-        tgt_slice = target[:, 0, mid]
-        C1, C2 = 0.01 ** 2, 0.03 ** 2
-        pad = window_size // 2
-        mu_p = F.avg_pool2d(pred_slice.unsqueeze(1), window_size, stride=1, padding=pad).squeeze(1)
-        mu_t = F.avg_pool2d(tgt_slice.unsqueeze(1), window_size, stride=1, padding=pad).squeeze(1)
-        sigma_p = F.avg_pool2d(pred_slice.unsqueeze(1) ** 2, window_size, stride=1, padding=pad).squeeze(1) - mu_p ** 2
-        sigma_t = F.avg_pool2d(tgt_slice.unsqueeze(1) ** 2, window_size, stride=1, padding=pad).squeeze(1) - mu_t ** 2
-        sigma_pt = F.avg_pool2d(pred_slice.unsqueeze(1) * tgt_slice.unsqueeze(1), window_size, stride=1, padding=pad).squeeze(1) - mu_p * mu_t
-        ssim_map = ((2 * mu_p * mu_t + C1) * (2 * sigma_pt + C2)) / ((mu_p ** 2 + mu_t ** 2 + C1) * (sigma_p + sigma_t + C2))
-        return ssim_map.mean()
+        return {
+            "loss": loss,
+            "l1_loss": l1_loss.detach(),
+            "wavelet_loss": wl.detach(),
+            "prediction": prediction.detach(),
+            "target": target.detach(),
+        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.decoder.parameters(), lr=self.lr, weight_decay=self.weight_decay)
