@@ -9,6 +9,8 @@ from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
 from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.decoder_module import DecoderTrainingModule
+from jedi.training.schedule import estimate_total_steps
+from jedi.training.trainer_config import TrainerConfig
 from jedi.utils import load_encoder_side_checkpoint
 
 
@@ -33,7 +35,7 @@ def main(cfg: DictConfig):
     train_loader = build_dataloader(cfg.data.data_dir, "train", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
     val_data_dir = cfg.data.get("val_data_dir") or cfg.data.data_dir
     val_loader = build_dataloader(val_data_dir, "val", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
-    total_steps = len(train_loader) * cfg.trainer.max_epochs
+    total_steps = estimate_total_steps(train_loader, cfg.trainer)
     warmup_steps = OmegaConf.select(cfg, "scheduler.warmup_steps", default=0)
     use_cls_embedding = OmegaConf.select(cfg.decoder_model, "use_cls_embedding", default=False)
     module = DecoderTrainingModule(
@@ -71,10 +73,10 @@ def main(cfg: DictConfig):
                 save_dir=OmegaConf.select(wandb_cfg, "save_dir", default="logs"),
             )
         )
-    trainer = pl.Trainer(
-        max_epochs=cfg.trainer.max_epochs,
-        accelerator=cfg.trainer.accelerator,
-        devices=cfg.trainer.devices,
+    trainer_config = TrainerConfig.from_config(cfg.trainer)
+    trainer = trainer_config.build(
+        gradient_clip_val=None,
+        gradient_clip_algorithm=None,
         callbacks=callbacks,
         logger=loggers,
     )
