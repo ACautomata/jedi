@@ -1,3 +1,4 @@
+import os
 import unittest
 from dataclasses import fields
 
@@ -6,6 +7,8 @@ from omegaconf import OmegaConf
 
 from jedi.training.schedule import estimate_total_steps
 from jedi.training.trainer_config import TrainerConfig
+
+_CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "jedi", "config")
 
 
 class SizedLoader:
@@ -19,7 +22,7 @@ class SizedLoader:
 class TestTrainerConfig(unittest.TestCase):
     def test_train_configs_include_supported_trainer_fields(self):
         supported_fields = {field.name for field in fields(TrainerConfig)}
-        with initialize_config_dir(config_dir="/Users/junran/Documents/jedi/src/jedi/config", version_base=None):
+        with initialize_config_dir(config_dir=os.path.abspath(_CONFIG_DIR), version_base=None):
             encoder_cfg = compose(config_name="train_encoder")
             decoder_cfg = compose(config_name="train_decoder")
 
