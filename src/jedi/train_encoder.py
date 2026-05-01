@@ -9,6 +9,7 @@ from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
 from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.encoder_module import EncoderTrainingModule
+from jedi.training.trainer_config import TrainerConfig
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train_encoder")
@@ -57,12 +58,8 @@ def main(cfg: DictConfig):
     if custom_callbacks_cfg:
         for cb_cfg in custom_callbacks_cfg.values():
             callbacks.append(instantiate(cb_cfg))
-    trainer = pl.Trainer(
-        max_epochs=cfg.trainer.max_epochs,
-        accelerator=cfg.trainer.accelerator,
-        devices=cfg.trainer.devices,
-        gradient_clip_val=OmegaConf.select(cfg.trainer, "gradient_clip_val", default=1.0),
-        gradient_clip_algorithm="norm",
+    trainer_config = TrainerConfig.from_config(cfg.trainer)
+    trainer = trainer_config.build(
         callbacks=callbacks,
         logger=CSVLogger("logs", name="encoder_stage"),
     )

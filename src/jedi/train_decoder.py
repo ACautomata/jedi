@@ -9,6 +9,7 @@ from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
 from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.decoder_module import DecoderTrainingModule
+from jedi.training.trainer_config import TrainerConfig
 from jedi.utils import load_encoder_side_checkpoint
 
 
@@ -61,10 +62,10 @@ def main(cfg: DictConfig):
     if custom_callbacks_cfg:
         for cb_cfg in custom_callbacks_cfg.values():
             callbacks.append(instantiate(cb_cfg))
-    trainer = pl.Trainer(
-        max_epochs=cfg.trainer.max_epochs,
-        accelerator=cfg.trainer.accelerator,
-        devices=cfg.trainer.devices,
+    trainer_config = TrainerConfig.from_config(cfg.trainer)
+    trainer = trainer_config.build(
+        gradient_clip_val=None,
+        gradient_clip_algorithm=None,
         callbacks=callbacks,
         logger=CSVLogger("logs", name="decoder_stage"),
     )
