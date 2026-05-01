@@ -1,7 +1,7 @@
 data_dir: /path/to/BraTS2023
 val_data_dir: null
 spatial_size: [128, 160, 192]
-batch_size: 1
+batch_size: 2
 num_workers: 4
 fixed_mapping: [t1n, t2w]
 a_min: 0.0

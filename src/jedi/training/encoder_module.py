@@ -1,7 +1,8 @@
 import lightning as pl
 import torch
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+
+from jedi.training.optim import build_adamw, build_warmup_cosine_scheduler
 
 
 class EncoderTrainingModule(pl.LightningModule):
@@ -48,12 +49,8 @@ class EncoderTrainingModule(pl.LightningModule):
         }
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        if self.warmup_steps <= 0 or self.total_steps <= 0:
+        optimizer = build_adamw(self, self.lr, self.weight_decay)
+        scheduler = build_warmup_cosine_scheduler(optimizer, self.lr, self.warmup_steps, self.total_steps)
+        if scheduler is None:
             return optimizer
-        warmup = min(self.warmup_steps, self.total_steps - 1)
-        scheduler = SequentialLR(optimizer, [
-            LinearLR(optimizer, start_factor=1e-3, end_factor=1.0, total_iters=warmup),
-            CosineAnnealingLR(optimizer, T_max=self.total_steps - warmup, eta_min=self.lr * 0.01),
-        ], milestones=[warmup])
         return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
