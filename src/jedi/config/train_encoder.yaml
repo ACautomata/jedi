@@ -1,6 +1,7 @@
 defaults:
   - data: brats2023
   - model: encoder
+  - trainer: default
   - _self_
 
 seed: 2024
@@ -11,11 +12,6 @@ scheduler:
   warmup_steps: 500
 loss:
   sigreg_weight: 0.09
-trainer:
-  max_epochs: 100
-  accelerator: gpu
-  devices: 1
-  gradient_clip_val: 1.0
 wandb:
   enabled: true
   project: jedi
