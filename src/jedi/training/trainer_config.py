@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from inspect import signature
 from typing import Any
 
 import lightning as pl
@@ -54,6 +55,11 @@ class TrainerConfig:
         return cls(**OmegaConf.to_container(cfg, resolve=True))
 
     def build(self, **overrides: Any) -> pl.Trainer:
-        params = {field: value for field, value in self.__dict__.items() if value is not None}
-        params.update(overrides)
+        supported_params = signature(pl.Trainer).parameters
+        params = {
+            field: value
+            for field, value in self.__dict__.items()
+            if value is not None and field in supported_params
+        }
+        params.update({field: value for field, value in overrides.items() if field in supported_params})
         return pl.Trainer(**params)
