@@ -18,6 +18,7 @@ dependencies = [
   "torch",
   "pytorch-wavelets",
   "torchvision",
+  "wandb",
 ]
 
 [project.scripts]

@@ -12,6 +12,11 @@ scheduler:
   warmup_steps: 500
 loss:
   sigreg_weight: 0.09
+wandb:
+  enabled: true
+  project: jedi
+  name: encoder_stage
+  save_dir: ???
 callbacks:
   training_dynamics:
     _target_: jedi.training.callbacks.TrainingDynamicsCallback

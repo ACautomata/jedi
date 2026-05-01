@@ -11,6 +11,11 @@ optimizer:
   weight_decay: 1e-4
 scheduler:
   warmup_steps: 500
+wandb:
+  enabled: true
+  project: jedi
+  name: decoder_stage
+  save_dir: ???
 callbacks:
   training_dynamics:
     _target_: jedi.training.callbacks.TrainingDynamicsCallback

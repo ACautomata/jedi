@@ -2,7 +2,7 @@ import hydra
 import lightning as pl
 from hydra.utils import instantiate
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.loggers import CSVLogger, WandbLogger
 from omegaconf import DictConfig, OmegaConf
 
 from jedi.data.brats import build_dataloader
@@ -63,12 +63,22 @@ def main(cfg: DictConfig):
     if custom_callbacks_cfg:
         for cb_cfg in custom_callbacks_cfg.values():
             callbacks.append(instantiate(cb_cfg))
+    loggers = [CSVLogger("logs", name="decoder_stage")]
+    wandb_cfg = OmegaConf.select(cfg, "wandb", default=None)
+    if wandb_cfg and OmegaConf.select(wandb_cfg, "enabled", default=False):
+        loggers.append(
+            WandbLogger(
+                project=wandb_cfg.project,
+                name=OmegaConf.select(wandb_cfg, "name", default="decoder_stage"),
+                save_dir=OmegaConf.select(wandb_cfg, "save_dir", default="logs"),
+            )
+        )
     trainer_config = TrainerConfig.from_config(cfg.trainer)
     trainer = trainer_config.build(
         gradient_clip_val=None,
         gradient_clip_algorithm=None,
         callbacks=callbacks,
-        logger=CSVLogger("logs", name="decoder_stage"),
+        logger=loggers,
     )
     trainer.fit(module, train_loader, val_loader)
 
