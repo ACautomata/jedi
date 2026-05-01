@@ -22,28 +22,30 @@ class EncoderTrainingModule(pl.LightningModule):
         pred_loss = F.mse_loss(pred_tgt_emb, tgt_output["patch_embeddings"].detach())
         sigreg_loss = self.regularizer(tgt_output["patch_embeddings"].transpose(0, 1))
         loss = pred_loss + self.sigreg_weight * sigreg_loss
-        self.log("train/pred_loss", pred_loss, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train/sigreg_loss", sigreg_loss, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train/loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return {
             "loss": loss,
+            "pred_loss": pred_loss.detach(),
+            "sigreg_loss": sigreg_loss.detach(),
             "patch_embeddings": tgt_output["patch_embeddings"].detach(),
             "pred_emb": pred_tgt_emb.detach(),
             "tgt_emb": tgt_output["patch_embeddings"].detach(),
-            "sigreg_loss": sigreg_loss.detach(),
         }
 
     def validation_step(self, batch, batch_idx):
-        src_output, tgt_output = self.model.encode_src_tgt(batch["src"], batch["tgt"])
-        tgt_modality_idx = batch.get("tgt_modality_idx", None)
-        pred_tgt_emb = self.model.predict_tgt(src_output["patch_embeddings"], tgt_modality=tgt_modality_idx)
-        pred_loss = F.mse_loss(pred_tgt_emb, tgt_output["patch_embeddings"].detach())
-        sigreg_loss = self.regularizer(tgt_output["patch_embeddings"].transpose(0, 1))
-        loss = pred_loss + self.sigreg_weight * sigreg_loss
-        self.log("val/pred_loss", pred_loss, on_epoch=True, sync_dist=True)
-        self.log("val/sigreg_loss", sigreg_loss, on_epoch=True, sync_dist=True)
-        self.log("val/loss", loss, on_epoch=True, sync_dist=True)
-        return loss
+        with torch.no_grad():
+            src_output, tgt_output = self.model.encode_src_tgt(batch["src"], batch["tgt"])
+            tgt_modality_idx = batch.get("tgt_modality_idx", None)
+            pred_tgt_emb = self.model.predict_tgt(src_output["patch_embeddings"], tgt_modality=tgt_modality_idx)
+            pred_loss = F.mse_loss(pred_tgt_emb, tgt_output["patch_embeddings"].detach())
+            sigreg_loss = self.regularizer(tgt_output["patch_embeddings"].transpose(0, 1))
+            loss = pred_loss + self.sigreg_weight * sigreg_loss
+        return {
+            "loss": loss,
+            "pred_loss": pred_loss.detach(),
+            "sigreg_loss": sigreg_loss.detach(),
+            "pred_emb": pred_tgt_emb.detach(),
+            "tgt_emb": tgt_output["patch_embeddings"].detach(),
+        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

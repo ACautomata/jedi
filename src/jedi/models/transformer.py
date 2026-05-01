@@ -3,6 +3,24 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
+try:
+    from flash_attn_interface import flash_attn_func as _fa3_func
+
+    _HAS_FA3 = True
+except ImportError:
+    _HAS_FA3 = False
+
+
+def _flash_attn(q, k, v, causal=False):
+    """FlashAttention-3 backend; returns None if not applicable."""
+    if not (_HAS_FA3 and q.is_cuda and q.dtype in (torch.float16, torch.bfloat16)):
+        return None
+    out, _ = _fa3_func(
+        q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2),
+        causal=causal,
+    )
+    return out.transpose(1, 2)
+
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.0):
@@ -35,13 +53,10 @@ class Attention(nn.Module):
             x = self.norm(x)
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = (rearrange(t, "b t (h d) -> b h t d", h=self.heads) for t in qkv)
-        out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=causal,
-        )
+        dropout_p = self.dropout if self.training else 0.0
+        out = _flash_attn(q, k, v, causal=causal)
+        if out is None:
+            out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p, is_causal=causal)
         out = rearrange(out, "b h t d -> b t (h d)")
         return self.to_out(out)
 

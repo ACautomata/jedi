@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
-from jedi.models.transformer import FeedForward
+from jedi.models.transformer import FeedForward, _flash_attn
 
 
 class CrossAttention(nn.Module):
@@ -26,10 +26,10 @@ class CrossAttention(nn.Module):
         q = rearrange(self.to_q(x), "b n (h d) -> b h n d", h=self.heads)
         k = rearrange(self.to_k(context), "b n (h d) -> b h n d", h=self.heads)
         v = rearrange(self.to_v(context), "b n (h d) -> b h n d", h=self.heads)
-        out = F.scaled_dot_product_attention(
-            q, k, v,
-            dropout_p=self.dropout if self.training else 0.0,
-        )
+        dropout_p = self.dropout if self.training else 0.0
+        out = _flash_attn(q, k, v)
+        if out is None:
+            out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
         out = rearrange(out, "b h n d -> b n (h d)")
         return self.to_out(out)
 

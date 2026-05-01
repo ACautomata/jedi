@@ -17,14 +17,17 @@ trainer:
   devices: 1
   gradient_clip_val: 1.0
 callbacks:
-  system_monitoring:
-    _target_: jedi.training.callbacks.SystemMonitoringCallback
+  training_dynamics:
+    _target_: jedi.training.callbacks.TrainingDynamicsCallback
     log_interval: 50
   embedding_statistics:
     _target_: jedi.training.callbacks.EmbeddingStatisticsCallback
     log_interval: 100
   prediction_quality:
     _target_: jedi.training.callbacks.PredictionQualityCallback
+    log_interval: 100
+  latent_eval_metrics:
+    _target_: jedi.training.callbacks.LatentEvalMetricsCallback
     log_interval: 100
   sigreg_monitor:
     _target_: jedi.training.callbacks.SIGRegMonitor

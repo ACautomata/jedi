@@ -179,8 +179,8 @@ class TestVisualizationDecoder(unittest.TestCase):
             decoder_input = module._get_decoder_input(src_output, batch)
             self.assertTrue(torch.equal(decoder_input, src_output["cls_embedding"]),
                             "decoder input should be the raw cls_embedding, not the predictor output")
-        loss = module.training_step(batch, 0)
-        self.assertTrue(torch.isfinite(loss))
+        output = module.training_step(batch, 0)
+        self.assertTrue(torch.isfinite(output["loss"]))
         self.assertTrue(all(not param.requires_grad for param in model.parameters()))
         self.assertTrue(any(param.requires_grad for param in decoder.parameters()))
 
@@ -221,8 +221,8 @@ class TestVisualizationDecoder(unittest.TestCase):
             "src": torch.randn(2, 1, 32, 32, 32),
             "tgt": torch.randn(2, 1, 32, 32, 32),
         }
-        loss = module.validation_step(batch, 0)
-        self.assertTrue(torch.isfinite(loss))
+        output = module.validation_step(batch, 0)
+        self.assertTrue(torch.isfinite(output["loss"]))
 
     def test_visualization_decoder_use_cls_embedding_false_raises(self):
         encoder = ViT3DEncoder(
@@ -306,8 +306,8 @@ class TestVisualizationDecoder(unittest.TestCase):
             "src": torch.randn(2, 1, 32, 32, 32),
             "tgt": torch.randn(2, 1, 32, 32, 32),
         }
-        loss = module.training_step(batch, 0)
-        self.assertTrue(torch.isfinite(loss))
+        output = module.training_step(batch, 0)
+        self.assertTrue(torch.isfinite(output["loss"]))
 
 
 if __name__ == "__main__":
