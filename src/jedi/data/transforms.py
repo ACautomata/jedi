@@ -113,6 +113,33 @@ class _FixedRandSimulateLowResolutiond(MapTransform, RandomizableTransform):
         return d
 
 
+def build_single_volume_transforms(spatial_size: tuple[int, int, int], a_min: float, a_max: float):
+    return Compose([
+        LoadImaged(keys=["volume"]),
+        EnsureChannelFirstd(keys=["volume"]),
+        Orientationd(keys=["volume"], axcodes="RAS"),
+        SpatialPadd(keys=["volume"], spatial_size=spatial_size),
+        CenterSpatialCropd(keys=["volume"], roi_size=spatial_size),
+        ScaleIntensityRanged(
+            keys=["volume"],
+            a_min=a_min,
+            a_max=a_max,
+            b_min=-1.0,
+            b_max=1.0,
+            clip=True,
+        ),
+        EnsureTyped(keys=["volume"]),
+    ])
+
+
+def build_pair_random_transforms():
+    return Compose(
+        build_nnunet_augmentations()
+        + build_intensity_augmentations()
+        + [EnsureTyped(keys=["src", "tgt"])]
+    )
+
+
 def build_base_transforms(spatial_size: tuple[int, int, int]):
     return [
         LoadImaged(keys=["src", "tgt"]),
