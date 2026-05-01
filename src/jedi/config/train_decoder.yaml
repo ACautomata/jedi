@@ -19,7 +19,7 @@ wandb:
   enabled: true
   project: jedi
   name: decoder_stage
-  save_dir: /data/experiment/junran/jedi/logs
+  save_dir: ???
 callbacks:
   training_dynamics:
     _target_: jedi.training.callbacks.TrainingDynamicsCallback
