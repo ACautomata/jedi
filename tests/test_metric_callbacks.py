@@ -61,15 +61,11 @@ class TestMetricCallbacks(unittest.TestCase):
     def test_training_dynamics_callback_logs_gradient_metrics(self):
         module = DummyModule()
         module.weight.grad = torch.ones_like(module.weight)
-        trainer = Mock()
-        trainer.optimizers = [Mock(param_groups=[{"lr": 1e-4, "weight_decay": 1e-2}])]
-        TrainingDynamicsCallback(log_interval=1).on_train_batch_end(trainer, module, {}, {}, 0)
+        TrainingDynamicsCallback(log_interval=1).on_train_batch_end(Mock(), module, {}, {}, 0)
         names = [name for name, _, _ in module.logged]
         self.assertIn("dynamics/grad_norm", names)
         self.assertIn("dynamics/param_norm", names)
         self.assertIn("dynamics/grad_to_param_norm", names)
-        self.assertIn("dynamics/learning_rate", names)
-        self.assertIn("dynamics/weight_decay", names)
 
 
 if __name__ == "__main__":

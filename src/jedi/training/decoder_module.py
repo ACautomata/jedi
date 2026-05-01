@@ -68,8 +68,6 @@ class DecoderTrainingModule(pl.LightningModule):
             "loss": loss.detach(),
             "l1_loss": l1_loss.detach(),
             "wavelet_loss": wl.detach(),
-            "prediction": prediction.detach(),
-            "target": target.detach(),
         }
 
         try:

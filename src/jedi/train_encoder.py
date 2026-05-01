@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
+from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.encoder_module import EncoderTrainingModule
 
 
@@ -42,6 +43,7 @@ def main(cfg: DictConfig):
         total_steps=total_steps,
     )
     callbacks = [
+        LossMetricsCallback(),
         LearningRateMonitor(logging_interval="step"),
         ModelCheckpoint(
             dirpath="checkpoints/encoder",

@@ -27,11 +27,6 @@ class TrainingDynamicsCallback(Callback):
             pl_module.log("dynamics/grad_norm", grad_norm, on_step=True, sync_dist=True)
             pl_module.log("dynamics/param_norm", param_norm, on_step=True, sync_dist=True)
             pl_module.log("dynamics/grad_to_param_norm", grad_norm / max(param_norm, 1e-12), on_step=True, sync_dist=True)
-            optimizers = trainer.optimizers
-            if optimizers:
-                group = optimizers[0].param_groups[0]
-                pl_module.log("dynamics/learning_rate", group["lr"], on_step=True, sync_dist=True)
-                pl_module.log("dynamics/weight_decay", group.get("weight_decay", 0.0), on_step=True, sync_dist=True)
         except Exception as exc:
             warnings.warn(f"[TrainingDynamicsCallback] {exc}", RuntimeWarning)
 

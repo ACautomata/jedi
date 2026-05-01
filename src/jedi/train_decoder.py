@@ -7,6 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
+from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.decoder_module import DecoderTrainingModule
 from jedi.utils import load_encoder_side_checkpoint
 
@@ -46,6 +47,7 @@ def main(cfg: DictConfig):
         gradient_clip_val=OmegaConf.select(cfg.trainer, "gradient_clip_val", default=1.0),
     )
     callbacks = [
+        LossMetricsCallback(),
         LearningRateMonitor(logging_interval="step"),
         ModelCheckpoint(
             dirpath="checkpoints/decoder",
