@@ -9,6 +9,8 @@ from jedi.data.brats import build_dataloader
 from jedi.models import CrossModalityJEPA
 from jedi.training.callbacks import LossMetricsCallback
 from jedi.training.encoder_module import EncoderTrainingModule
+from jedi.training.schedule import estimate_total_steps
+from jedi.training.trainer_config import TrainerConfig
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train_encoder")
@@ -31,7 +33,7 @@ def main(cfg: DictConfig):
     train_loader = build_dataloader(cfg.data.data_dir, "train", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
     val_data_dir = cfg.data.get("val_data_dir") or cfg.data.data_dir
     val_loader = build_dataloader(val_data_dir, "val", tuple(cfg.data.fixed_mapping), cfg.data.batch_size, cfg.data.num_workers, tuple(cfg.data.spatial_size))
-    total_steps = len(train_loader) * cfg.trainer.max_epochs
+    total_steps = estimate_total_steps(train_loader, cfg.trainer)
     warmup_steps = OmegaConf.select(cfg, "scheduler.warmup_steps", default=0)
     module = EncoderTrainingModule(
         model=model,
@@ -57,12 +59,8 @@ def main(cfg: DictConfig):
     if custom_callbacks_cfg:
         for cb_cfg in custom_callbacks_cfg.values():
             callbacks.append(instantiate(cb_cfg))
-    trainer = pl.Trainer(
-        max_epochs=cfg.trainer.max_epochs,
-        accelerator=cfg.trainer.accelerator,
-        devices=cfg.trainer.devices,
-        gradient_clip_val=OmegaConf.select(cfg.trainer, "gradient_clip_val", default=1.0),
-        gradient_clip_algorithm="norm",
+    trainer_config = TrainerConfig.from_config(cfg.trainer)
+    trainer = trainer_config.build(
         callbacks=callbacks,
         logger=CSVLogger("logs", name="encoder_stage"),
     )
