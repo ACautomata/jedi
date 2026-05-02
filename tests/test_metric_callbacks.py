@@ -30,6 +30,16 @@ class TestMetricCallbacks(unittest.TestCase):
         self.assertIn("train/l1_loss", names)
         self.assertIn("train/wavelet_loss", names)
 
+    def test_loss_metrics_callback_prefers_unscaled_log_loss(self):
+        module = DummyModule()
+        outputs = {
+            "loss": torch.tensor(0.25),
+            "log_loss": torch.tensor(1.0),
+        }
+        LossMetricsCallback().on_train_batch_end(Mock(), module, outputs, {}, 0)
+        logged = {name: value for name, value, _ in module.logged}
+        self.assertEqual(logged["train/loss"].item(), 1.0)
+
     def test_latent_eval_metrics_callback_logs_latent_metrics(self):
         module = DummyModule()
         outputs = {
