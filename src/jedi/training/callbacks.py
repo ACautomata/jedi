@@ -39,7 +39,10 @@ class LossMetricsCallback(Callback):
     def _log_losses(self, pl_module, outputs, prefix, on_step, on_epoch):
         if not isinstance(outputs, dict):
             return
-        for name in ("loss", "pred_loss", "sigreg_loss", "l1_loss", "wavelet_loss"):
+        loss = outputs.get("log_loss", outputs.get("loss"))
+        if loss is not None:
+            pl_module.log(f"{prefix}/loss", loss, on_step=on_step, on_epoch=on_epoch, sync_dist=True)
+        for name in ("pred_loss", "sigreg_loss", "l1_loss", "wavelet_loss"):
             value = outputs.get(name)
             if value is not None:
                 pl_module.log(f"{prefix}/{name}", value, on_step=on_step, on_epoch=on_epoch, sync_dist=True)

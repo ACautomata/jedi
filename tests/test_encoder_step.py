@@ -31,6 +31,8 @@ class TestEncoderStep(unittest.TestCase):
         }
         loss = module.training_step(batch, 0)
         self.assertTrue(torch.isfinite(loss["loss"]))
+        self.assertTrue(torch.equal(loss["log_loss"], loss["loss"].detach()))
+        self.assertFalse(loss["log_loss"].requires_grad)
 
     def test_stage1_step_with_modality_conditioning(self):
         encoder = ViT3DEncoder(

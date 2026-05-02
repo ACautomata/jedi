@@ -25,6 +25,7 @@ class EncoderTrainingModule(pl.LightningModule):
         loss = pred_loss + self.sigreg_weight * sigreg_loss
         return {
             "loss": loss,
+            "log_loss": loss.detach(),
             "pred_loss": pred_loss.detach(),
             "sigreg_loss": sigreg_loss.detach(),
             "patch_embeddings": tgt_output["patch_embeddings"].detach(),
@@ -42,6 +43,7 @@ class EncoderTrainingModule(pl.LightningModule):
             loss = pred_loss + self.sigreg_weight * sigreg_loss
         return {
             "loss": loss,
+            "log_loss": loss.detach(),
             "pred_loss": pred_loss.detach(),
             "sigreg_loss": sigreg_loss.detach(),
             "pred_emb": pred_tgt_emb.detach(),
