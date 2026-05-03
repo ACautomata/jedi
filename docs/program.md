@@ -4,17 +4,18 @@ This is an autonomous ML research setup for Jedi: BraTS2023 cross-modality contr
 
 ## Architecture
 
-Two scopes of code, inspired by karpathy/autoresearch:
+The autoresearch loop is split into practical scopes, inspired by karpathy/autoresearch:
 
 - **prepare.py scope** (read-only): data loading, fixed configs, evaluation metrics, callbacks, tests, utilities
-- **train.py scope** (modifiable): model architectures, training logic, losses, optimizers, training entry points
+- **Stage 1 train.py scope** (modifiable): encoder-side model architecture, latent prediction logic, Stage 1 training objective, optimizers, schedulers, and the Stage 1 entry point
+- **Stage 2 downstream scope** (read-only by default): decoder training and reconstruction code used after a Stage 1 checkpoint exists
 
 Jedi has two training stages:
 
 1. **Stage 1 encoder-side latent alignment**: `src_volume` and `tgt_volume` are encoded by a shared 3D ViT stack. The predictor maps source latents toward target latents.
 2. **Stage 2 decoder training**: the encoder-side stack is loaded from a Stage 1 checkpoint and frozen. Only the decoder is trained from predicted target latents to target volumes.
 
-The default autoresearch loop optimizes **Stage 2 `val/loss`** using the existing Stage 1 checkpoint.
+The default autoresearch loop optimizes **Stage 1 `val/loss`** from `EncoderTrainingModule.validation_step`. Stage 2 is a downstream consumer of the produced checkpoint and should not be run or modified unless the human explicitly asks for downstream validation.
 
 ## Setup
 
@@ -33,30 +34,35 @@ To set up a new experiment, work with the user to:
      - `src/jedi/utils.py` — checkpoint-loading utility used by Stage 2
      - `src/jedi/infer.py` — inference/evaluation-style CLI and checkpoint loading
      - `tests/` — fixed behavioral and regression tests
-   - **train.py scope** (modifiable):
-     - `src/jedi/models/` — 3D ViT, transformer blocks, predictor, JEPA wrapper, decoder architectures, regularizers, wavelet loss
+   - **Stage 1 train.py scope** (modifiable):
+     - `src/jedi/models/components.py` — MLP projector/pred-proj blocks and modality embedder
+     - `src/jedi/models/jepa.py` — CrossModalityJEPA wrapper and source-to-target latent prediction path
+     - `src/jedi/models/predictor.py` — conditional latent predictor and AdaLN-style transformer blocks
+     - `src/jedi/models/regularizers.py` — SIGReg latent regularizer
+     - `src/jedi/models/transformer.py` — transformer attention/feed-forward primitives and FlashAttention fallback path
+     - `src/jedi/models/vit3d.py` — 3D ViT encoder architecture
      - `src/jedi/training/encoder_module.py` — Stage 1 LightningModule and latent alignment objective
-     - `src/jedi/training/decoder_module.py` — Stage 2 LightningModule, frozen encoder-side path, PCGrad, L1 + wavelet objective
      - `src/jedi/training/optim.py` — AdamW parameter groups and warmup/cosine scheduler construction
      - `src/jedi/training/schedule.py` — total-step estimation feeding scheduler behavior
      - `src/jedi/train_encoder.py` — Stage 1 training composition and entry point
-     - `src/jedi/train_decoder.py` — Stage 2 training composition and entry point
+   - **Stage 2 downstream scope** (read-only by default):
+     - `src/jedi/models/decoder3d.py`, `src/jedi/models/vis_decoder.py`, `src/jedi/models/wavelet_loss.py`
+     - `src/jedi/training/decoder_module.py`, `src/jedi/train_decoder.py`
 4. **Verify data/environment**:
    ```bash
    test -x .venv/bin/python
    PYTHONPATH=src .venv/bin/python -c "import jedi, torch, lightning, monai; print(jedi.__version__)"
    test -d "$BRATS_DATA_DIR"
-   test -f "$ENCODER_CHECKPOINT"
    find "$BRATS_DATA_DIR" -maxdepth 2 -name "*.nii.gz" | head
    ```
-   The BraTS data directory must contain case directories with `t1n`, `t1c`, `t2w`, and `t2f` NIfTI files. `ENCODER_CHECKPOINT` must point at a Stage 1 checkpoint compatible with the current encoder-side architecture.
+   The BraTS data directory must contain case directories with `t1n`, `t1c`, `t2w`, and `t2f` NIfTI files. Stage 1 autoresearch trains from scratch and does not require `ENCODER_CHECKPOINT`.
 5. **Initialize results.tsv**: Create `results.tsv` with the header row:
    ```
    commit	val/loss	memory_gb	status	description
    ```
 6. **Initialize memory index**: Ensure the memory directory exists at `~/.claude/projects/<project-path>/memory/` and add an entry to `MEMORY.md` indexing the autoresearch run:
    ```
-   - [Autoresearch <tag>](exp_<tag>_overview.md) — experiment run on 2026-05-03, optimizing Stage 2 val/loss
+   - [Autoresearch <tag>](exp_<tag>_overview.md) — experiment run on 2026-05-03, optimizing Stage 1 val/loss
    ```
 7. **Confirm and go**: Confirm setup looks good.
 
@@ -68,45 +74,46 @@ Each experiment runs via:
 ```bash
 RUN_TAG=baseline \
 BRATS_DATA_DIR=/path/to/BraTS2023 \
-ENCODER_CHECKPOINT=/path/to/stage1.ckpt \
-PYTHONPATH=src .venv/bin/python -m jedi.train_decoder \
+PYTHONPATH=src .venv/bin/python -m jedi.train_encoder \
   data.data_dir="$BRATS_DATA_DIR" \
-  decoder_model.encoder_checkpoint="$ENCODER_CHECKPOINT" \
   wandb.enabled=false \
   trainer.default_root_dir="autoresearch_runs/${RUN_TAG}" \
   hydra.run.dir="autoresearch_runs/${RUN_TAG}/hydra"
 ```
 
-Training runs for the configured Stage 2 budget: `trainer.max_epochs=100`, `trainer.accumulate_grad_batches=4`, validation once per epoch, and checkpointing on the lowest `val/loss`.
+Training runs for the configured Stage 1 budget: `trainer.max_epochs=100`, `trainer.accumulate_grad_batches=4`, validation once per epoch, and checkpointing on the lowest `val/loss`.
 
 For shorter exploratory smoke runs only, explicitly override the budget in the command, for example `trainer.max_epochs=1 trainer.limit_train_batches=2 trainer.limit_val_batches=2`. Do not compare smoke-run metrics against full-run metrics.
 
 **What you CAN do:**
-- Modify files in train.py scope:
-  - model architectures: `src/jedi/models/*.py`
-  - training modules: `src/jedi/training/encoder_module.py`, `src/jedi/training/decoder_module.py`
-  - loss and regularization code: `src/jedi/models/regularizers.py`, `src/jedi/models/wavelet_loss.py`
+- Modify files in Stage 1 train.py scope:
+  - encoder-side model architectures: `src/jedi/models/components.py`, `src/jedi/models/jepa.py`, `src/jedi/models/predictor.py`, `src/jedi/models/transformer.py`, `src/jedi/models/vit3d.py`
+  - regularization code: `src/jedi/models/regularizers.py`
+  - Stage 1 training module: `src/jedi/training/encoder_module.py`
   - optimizer and scheduler construction: `src/jedi/training/optim.py`, `src/jedi/training/schedule.py`
-  - training entry point composition: `src/jedi/train_encoder.py`, `src/jedi/train_decoder.py`
-- Prefer Stage 2 decoder-side experiments by default, because the command loads a fixed Stage 1 checkpoint.
-- If you change encoder-side architecture or latent dimensions, you must first run a matching Stage 1 training run and use its new checkpoint for Stage 2; otherwise Stage 2 checkpoint loading is not comparable.
+  - Stage 1 entry point composition: `src/jedi/train_encoder.py`
+- Prefer changes that preserve the validation metric semantics so results stay comparable across commits.
+- Add training-only auxiliary terms or architecture changes only when `validation_step` still reports the fixed Stage 1 latent-alignment metric.
+- If you change latent dimensionality, token count, or checkpoint key structure, record the checkpoint as Stage 2-incompatible unless a matching downstream plan is approved by the human.
 
 **What you CANNOT do:**
 - Modify files in prepare.py scope. They are read-only.
 - Install new packages. Use only existing dependencies.
 - Modify data loading, data transforms, fixed config files, callbacks, metric implementations, tests, or inference/evaluation harnesses.
+- Modify Stage 2 decoder/reconstruction files during Stage 1 autoresearch unless the human explicitly expands the scope.
 - Change the BraTS train/validation modality mapping or validation transforms to make results easier.
-- Reintroduce Stage 2 loss weight hyperparameters unless the human explicitly requests it.
+- Game the target metric by changing what `val/loss` means, skipping the predictor target loss, or logging a different value under the same name.
 
 **The goal: get the lowest `val/loss`.**
-`val/loss` is Stage 2 validation reconstruction loss from `DecoderTrainingModule.validation_step`: `(l1_loss + wavelet_loss) / 2`. Lower is better. It is also the checkpoint monitor in `src/jedi/train_decoder.py`.
+`val/loss` is Stage 1 validation latent-alignment loss from `EncoderTrainingModule.validation_step`: `pred_loss + sigreg_weight * sigreg_loss`. Lower is better. It is also the checkpoint monitor in `src/jedi/train_encoder.py`.
 
 **Multi-metric discipline**: This project tracks multiple metrics. The primary target is `val/loss`, but **when a metric becomes the optimization target, it loses objectivity**. A change that improves `val/loss` while degrading secondary metrics is suspect. Always cross-reference:
-- `val/l1_loss`: should decrease or remain stable when `val/loss` improves.
-- `val/wavelet_loss`: should decrease or remain stable; large regressions mean the primary loss may be hiding frequency-domain artifacts.
-- `val/mse`, `val/mae`, `val/rmse`, `val/nrmse`: should generally decrease with genuine reconstruction improvement.
-- `val/psnr`: should increase when MSE improves.
-- `val/ssim`: should increase or remain stable; a falling SSIM flags perceptual/structural degradation.
+- `val/pred_loss`: should decrease or remain stable when `val/loss` improves; otherwise the gain may be regularizer-only.
+- `val/sigreg_loss`: should stay finite and should not dominate the improvement while latent prediction gets worse.
+- `val/latent_mse` and `val/latent_mae`: should generally decrease with genuine latent alignment improvement.
+- `val/latent_cosine` and `val/latent_pearson`: should increase or remain stable; falling similarity flags worse source-to-target prediction.
+- `prediction/cosine_sim_mean`, `prediction/pred_emb_norm`, and `prediction/tgt_emb_norm`: should stay finite and avoid norm collapse or explosion.
+- `embedding/mean` and `embedding/std`: should remain stable enough that the latent space is not collapsing.
 - `dynamics/grad_norm` and `dynamics/grad_to_param_norm`: should stay finite and not spike persistently.
 - Peak memory: may increase for meaningful gains, but large jumps need a clear metric improvement.
 Only declare an improvement genuine when the primary metric improves AND secondary metrics are stable or improving. If primary improves but a critical secondary degrades significantly, flag it for human review rather than auto-keeping.
@@ -115,30 +122,29 @@ Only declare an improvement genuine when the primary metric improves AND seconda
 
 **Simplicity criterion**: All else being equal, simpler is better. For this project, treat `0.001` absolute `val/loss` as the minimum meaningful improvement unless repeated runs show a different run-to-run variance. A `0.001` `val/loss` improvement that adds `20` lines of hacky code is probably not worth it. A `0.001` `val/loss` improvement from deleting code is definitely worth keeping. An improvement of ~0 but much simpler code is also worth keeping. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude.
 
-**The first run**: Always establish the baseline first — run training as-is with no modifications.
+**The first run**: Always establish the baseline first — run Stage 1 training as-is with no modifications.
 
 ## Output format
 
-This project does not implement a custom final `print()` summary. Lightning writes metrics through `CSVLogger` under `logs/decoder_stage/version_*/metrics.csv`, and the command log contains Lightning progress/checkpoint output. After a completed Stage 2 run, extract and print a concrete summary like this:
+This project does not implement a custom final `print()` summary. Lightning writes metrics through `CSVLogger` under `logs/encoder_stage/version_*/metrics.csv`, and the command log contains Lightning progress/checkpoint output. After a completed Stage 1 run, extract and print a concrete summary like this:
 ```
-primary_metric: 0.156234
-val_loss: 0.156234
-val_l1_loss: 0.128901
-val_wavelet_loss: 0.183567
-val_mse: 0.041230
-val_mae: 0.128901
-val_rmse: 0.203052
-val_nrmse: 0.812345
-val_psnr: 19.868500
-val_ssim: 0.742100
+primary_metric: 0.276234
+val_loss: 0.276234
+val_pred_loss: 0.241901
+val_sigreg_loss: 0.381478
+val_latent_mse: 0.241901
+val_latent_mae: 0.362900
+val_latent_cosine: 0.735100
+val_latent_pearson: 0.701200
+train_loss_epoch: 0.072460
 peak_memory_gb: 21.4
 ```
 
 You can extract the key metric from the CSV log file:
 ```bash
-METRICS_CSV=$(find logs/decoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
+METRICS_CSV=$(find logs/encoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
 PYTHONPATH=src .venv/bin/python - <<'PY'
-import csv, math, os
+import csv, os
 path = os.environ["METRICS_CSV"]
 rows = list(csv.DictReader(open(path, newline="")))
 values = [float(row["val/loss"]) for row in rows if row.get("val/loss") not in (None, "")]
@@ -148,21 +154,27 @@ PY
 
 Extract all useful secondary metrics:
 ```bash
-METRICS_CSV=$(find logs/decoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
+METRICS_CSV=$(find logs/encoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
 PYTHONPATH=src .venv/bin/python - <<'PY'
 import csv, os
 path = os.environ["METRICS_CSV"]
 rows = list(csv.DictReader(open(path, newline="")))
 keys = [
     "val/loss",
-    "val/l1_loss",
-    "val/wavelet_loss",
-    "val/mse",
-    "val/mae",
-    "val/rmse",
-    "val/nrmse",
-    "val/psnr",
-    "val/ssim",
+    "val/pred_loss",
+    "val/sigreg_loss",
+    "val/latent_mse",
+    "val/latent_mae",
+    "val/latent_cosine",
+    "val/latent_pearson",
+    "train/loss_epoch",
+    "train/pred_loss_epoch",
+    "train/sigreg_loss_epoch",
+    "prediction/cosine_sim_mean",
+    "prediction/pred_emb_norm",
+    "prediction/tgt_emb_norm",
+    "embedding/mean",
+    "embedding/std",
     "dynamics/grad_norm",
     "dynamics/param_norm",
     "dynamics/grad_to_param_norm",
@@ -171,17 +183,22 @@ for key in keys:
     values = [row[key] for row in rows if key in row and row[key] not in (None, "")]
     if values:
         print(f"{key.replace('/', '_')}: {float(values[-1]):.6f}")
+lr_keys = sorted(key for key in rows[-1] if key.startswith("lr-")) if rows else []
+for key in lr_keys:
+    values = [row[key] for row in rows if row.get(key) not in (None, "")]
+    if values:
+        print(f"{key.replace('/', '_')}: {float(values[-1]):.8f}")
 PY
 ```
 
-If running on CUDA, capture peak memory with a wrapper around the training command:
+If running on CUDA, capture peak memory with a wrapper around the training command. A standalone command like this only reports memory for its own process:
 ```bash
 PYTHONPATH=src .venv/bin/python - <<'PY'
 import torch
 print(f"peak_memory_gb: {torch.cuda.max_memory_allocated() / 1024**3:.1f}")
 PY
 ```
-This standalone memory command only reports memory for its own process. For authoritative memory, wrap the training process with `/usr/bin/time -l` on macOS and convert `maximum resident set size` bytes to GB, or use `nvidia-smi --query-gpu=memory.used --format=csv` sampling during the run.
+For authoritative memory, wrap the training process with `/usr/bin/time -l` on macOS and convert `maximum resident set size` bytes to GB, or use `nvidia-smi --query-gpu=memory.used --format=csv` sampling during the run.
 
 ## Logging results
 
@@ -201,8 +218,8 @@ commit	val/loss	memory_gb	status	description
 Example:
 ```
 commit	val/loss	memory_gb	status	description
-a1b2c3d	0.156234	21.4	keep	baseline
-b2c3d4e	0.154812	22.0	keep	add lightweight decoder residual block
+a1b2c3d	0.276234	21.4	keep	baseline
+b2c3d4e	0.274812	22.0	keep	add predictor pre-norm residual
 ```
 
 ## Documenting findings
@@ -224,24 +241,24 @@ type: project
 
 Body must include:
 - **Idea**: what was tried and why
-- **Result**: `val/loss` value, comparison to baseline
+- **Result**: `val/loss`, key latent metrics, and comparison to baseline
 - **Verdict**: keep/discard/crash — and why
-- **Insight**: what was learned, such as whether decoder capacity, latent conditioning, PCGrad, or wavelet behavior was the limiting factor
+- **Insight**: what was learned, such as whether encoder capacity, predictor conditioning, latent normalization, SIGReg behavior, or scheduler dynamics was the limiting factor
 
 Keep each note concise (5-10 lines of body). The goal is to build a cumulative research log that prevents repeating failed ideas and surfaces patterns.
 
 Example:
 ```markdown
 ---
-name: exp_may03_decoder_residual_refine
-description: Lightweight residual refinement improved Stage 2 val/loss by 0.0014
+name: exp_may03_predictor_prenorm_residual
+description: Predictor pre-norm residual improved Stage 1 val/loss by 0.0014
 type: project
 ---
 
-**Idea**: Add one lightweight residual refinement block to test decoder capacity.
-**Result**: val/loss 0.1548 vs baseline 0.1562, memory 21.4→22.0 GB.
-**Verdict**: keep — improvement exceeds 0.001 and secondary metrics stayed stable.
-**Insight**: Decoder refinement capacity is likely a bottleneck after frozen latent prediction.
+**Idea**: Add a lightweight pre-norm residual path in the latent predictor to stabilize source-to-target token mapping.
+**Result**: val/loss 0.2748 vs baseline 0.2762, val/latent_cosine 0.7351→0.7410, memory 21.4→22.0 GB.
+**Verdict**: keep — improvement exceeds 0.001 and secondary latent metrics stayed stable.
+**Insight**: Predictor normalization, not encoder capacity alone, may be limiting Stage 1 latent alignment.
 ```
 
 ### results.tsv
@@ -254,7 +271,7 @@ The experiment runs on a dedicated branch, e.g. `autoresearch/may03`.
 
 LOOP FOREVER:
 1. Look at the git state: the current branch/commit.
-2. Modify files in **train.py scope** with an experimental idea.
+2. Modify files in **Stage 1 train.py scope** with an experimental idea.
 3. Run the narrow relevant tests first, then the full test suite when the change is non-trivial:
    ```bash
    PYTHONPATH=src .venv/bin/python -m pytest tests -v
@@ -264,14 +281,13 @@ LOOP FOREVER:
    ```bash
    RUN_TAG=<tag>-<experiment> \
    BRATS_DATA_DIR=/path/to/BraTS2023 \
-   ENCODER_CHECKPOINT=/path/to/stage1.ckpt \
-   /usr/bin/time -l sh -c 'PYTHONPATH=src .venv/bin/python -m jedi.train_decoder data.data_dir="$BRATS_DATA_DIR" decoder_model.encoder_checkpoint="$ENCODER_CHECKPOINT" wandb.enabled=false trainer.default_root_dir="autoresearch_runs/${RUN_TAG}" hydra.run.dir="autoresearch_runs/${RUN_TAG}/hydra"' \
+   /usr/bin/time -l sh -c 'PYTHONPATH=src .venv/bin/python -m jedi.train_encoder data.data_dir="$BRATS_DATA_DIR" wandb.enabled=false trainer.default_root_dir="autoresearch_runs/${RUN_TAG}" hydra.run.dir="autoresearch_runs/${RUN_TAG}/hydra"' \
      > "run_${RUN_TAG}.log" 2>&1
    ```
    Redirect everything — do NOT use `tee` or let output flood your context.
 6. Read out the result:
    ```bash
-   METRICS_CSV=$(find logs/decoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
+   METRICS_CSV=$(find logs/encoder_stage -path "*/metrics.csv" -print | sort | tail -n 1)
    PYTHONPATH=src .venv/bin/python - <<'PY'
 import csv, os
 path = os.environ["METRICS_CSV"]
@@ -283,10 +299,10 @@ PY
 7. If results can't be found, the run crashed. Check logs and attempt a fix. If you can't fix after a few attempts, give up on that idea.
 8. Record the results in `results.tsv` (do NOT commit `results.tsv` — leave it untracked).
 9. **Write a memory note** — save key findings to `memory/exp_<tag>_<description>.md` as documented in "Documenting findings" above. Every experiment gets a note.
-10. If `val/loss` improved (lower is better), advance the branch.
-11. If `val/loss` is equal or worse, git reset back to where you started.
+10. If `val/loss` improved (lower is better) and secondary metrics are stable, advance the branch.
+11. If `val/loss` is equal or worse, or the improvement is metric-gaming, git reset back to where you started.
 
-**Timeout**: Each full experiment should take one configured Stage 2 run: 100 epochs unless explicitly overridden. Use the baseline wall-clock time as the expected duration for this machine/data split. If a later run exceeds 2× the baseline duration, kill it and treat it as failure unless the log shows clear forward progress and the human has approved a longer budget.
+**Timeout**: Each full experiment should take one configured Stage 1 run: 100 epochs unless explicitly overridden. Use the baseline wall-clock time as the expected duration for this machine/data split. If a later run exceeds 2× the baseline duration, kill it and treat it as failure unless the log shows clear forward progress and the human has approved a longer budget.
 
 **Crashes**: If a run crashes (OOM, bug), fix simple issues and re-run. If the idea is fundamentally broken, log `crash` and move on.
 
@@ -294,16 +310,16 @@ PY
 
 ## Research Ideas
 
-1. **Decoder residual refinement**: replace the current single Conv3d refinement stack in `VolumeDecoder3D` with a small residual block to test whether reconstruction quality is decoder-capacity limited.
-2. **Patch-token decoder normalization**: test LayerNorm or RMS-style normalization before `to_voxels` so predicted target embeddings enter the decoder with a steadier scale.
-3. **Latent-to-volume upsampling alternative**: compare the current direct patch projection against a lightweight ConvTranspose3d refinement path after patch reassembly.
-4. **Predictor output stabilization for Stage 2**: add a train-time normalization or small adapter on decoder input while keeping the frozen encoder-side model unchanged.
-5. **PCGrad ablation inside Stage 2**: compare current PCGrad against a direct backward on `(l1_loss + wavelet_loss) / 2` to verify whether PCGrad helps the fixed L1 + wavelet objective.
-6. **Wavelet loss implementation tuning**: adjust internal wavelet decomposition behavior only within `WaveletLoss` code, while preserving the fixed external objective and no new loss-weight hyperparameters.
-7. **VisualizationDecoder as diagnostic decoder**: run controlled Stage 2 experiments using `vis_decoder.yaml` and `use_cls_embedding=true` to test whether CLS embeddings retain usable spatial information.
-8. **Modality conditioning stress test**: modify how `ModalityEmbedder` conditions `LatentPredictor` to see whether target-modality conditioning improves decoder validation loss without hurting latent metrics.
-9. **Transformer dropout/MLP capacity sweep in code**: test small architecture changes in `LatentPredictor` and decoder-side transformer blocks, but only when checkpoint compatibility is preserved or a matching Stage 1 checkpoint is produced.
-10. **Scheduler simplification**: test whether warmup/cosine scheduling beats a simpler constant LR for Stage 2 decoder-only training under the same budget.
+1. **Predictor pre-norm/residual stabilization**: add lightweight normalization or residual refinement inside `LatentPredictor` to improve source-to-target token mapping without changing validation metric semantics.
+2. **Modality conditioning stress test**: modify how `ModalityEmbedder` conditions `LatentPredictor` to see whether target-modality conditioning improves latent validation loss and cosine similarity.
+3. **Projection-head normalization**: test LayerNorm/RMS-style normalization around `projector` or `pred_proj` so source and target latent scales remain aligned.
+4. **SIGReg placement or train-only schedule**: test whether applying regularization at a different latent point or using a train-only schedule improves alignment while keeping validation metric semantics fixed.
+5. **Symmetric auxiliary prediction**: add a train-time auxiliary path that predicts source latents from target latents, while validation still measures the original source-to-target objective.
+6. **3D ViT token mixing capacity**: make small encoder-side transformer or MLP changes to test whether Stage 1 is capacity-limited rather than predictor-limited.
+7. **Patch embedding stabilization**: adjust patch embedding normalization or initialization in `ViT3D` to reduce latent scale drift early in training.
+8. **Attention/MLP simplification**: remove or simplify transformer-side components when metrics stay flat, preferring simpler code for equivalent validation performance.
+9. **Optimizer parameter grouping**: test weight-decay exclusions or learning-rate grouping for normalization, embeddings, and predictor parameters inside `build_adamw`.
+10. **Scheduler simplification**: test whether warmup/cosine scheduling beats a simpler constant LR for Stage 1 latent alignment under the same budget.
 
 ## File Scope Reference
 
@@ -346,23 +362,27 @@ PY
 | `tests/test_vit3d_shapes.py` | 3D ViT shape test. |
 | `tests/test_wavelet_loss.py` | Wavelet loss correctness and gradient tests. |
 
-### train.py scope (MODIFIABLE)
+### Stage 1 train.py scope (MODIFIABLE)
 | Directory/File | Role |
 |---|---|
-| `src/jedi/models/__init__.py` | Model exports and model composition surface. |
+| `src/jedi/models/__init__.py` | Model exports and Stage 1 model composition surface. |
 | `src/jedi/models/components.py` | MLP projector/pred-proj blocks and modality embedder. |
-| `src/jedi/models/decoder3d.py` | Patch-token-to-volume decoder architecture. |
 | `src/jedi/models/jepa.py` | CrossModalityJEPA wrapper and source-to-target latent prediction path. |
 | `src/jedi/models/predictor.py` | Conditional latent predictor and AdaLN-style transformer blocks. |
 | `src/jedi/models/regularizers.py` | SIGReg latent regularizer. |
 | `src/jedi/models/transformer.py` | Transformer attention/feed-forward primitives and FlashAttention fallback path. |
-| `src/jedi/models/vis_decoder.py` | Diagnostic CLS-to-volume decoder architecture. |
 | `src/jedi/models/vit3d.py` | 3D ViT encoder architecture. |
-| `src/jedi/models/wavelet_loss.py` | Wavelet-domain reconstruction loss implementation. |
 | `src/jedi/training/__init__.py` | Training module exports. |
 | `src/jedi/training/encoder_module.py` | Stage 1 LightningModule, latent prediction objective, optimizer hook. |
-| `src/jedi/training/decoder_module.py` | Stage 2 LightningModule, frozen encoder-side path, decoder objective, PCGrad manual optimization. |
 | `src/jedi/training/optim.py` | AdamW parameter grouping and LR scheduler construction. |
 | `src/jedi/training/schedule.py` | Total step estimation used by scheduler setup. |
 | `src/jedi/train_encoder.py` | Stage 1 training entry point and runtime model/module composition. |
+
+### Stage 2 downstream scope (READ-ONLY by default)
+| Directory/File | Role |
+|---|---|
+| `src/jedi/models/decoder3d.py` | Patch-token-to-volume decoder architecture. |
+| `src/jedi/models/vis_decoder.py` | Diagnostic CLS-to-volume decoder architecture. |
+| `src/jedi/models/wavelet_loss.py` | Wavelet-domain reconstruction loss implementation. |
+| `src/jedi/training/decoder_module.py` | Stage 2 LightningModule, frozen encoder-side path, decoder objective, PCGrad manual optimization. |
 | `src/jedi/train_decoder.py` | Stage 2 training entry point and runtime model/module composition. |
