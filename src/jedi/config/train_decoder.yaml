@@ -1,7 +1,7 @@
 defaults:
   - data: brats2023
   - model: encoder
-  - model@decoder_model: decoder
+  - model@decoder_model: vis_decoder
   - trainer: default
   - _self_
 
