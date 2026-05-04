@@ -18,7 +18,7 @@ def load_encoder_side_checkpoint(model, checkpoint_path: str):
     Returns:
         The same *model* with encoder-side weights loaded in-place.
     """
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     state_dict = checkpoint.get("state_dict", checkpoint)
     cleaned_state_dict = {}
     for key, value in state_dict.items():
